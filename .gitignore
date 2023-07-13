@@ -1,0 +1,17 @@
+﻿bin/
+obj/
+gen/
+.ant-targets-build.xml
+project.properties
+auto.prop
+.classpath
+.settings/
+*.iml
+
+.idea/
+local.properties
+build.xml
+6.1-main.iml
+.gradle/
+build/
+captures/
