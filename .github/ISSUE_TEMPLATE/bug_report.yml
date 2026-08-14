@@ -1,0 +1,74 @@
+name: 解包错误报告
+description: 报告可复现的 wxapkg 解包或资源还原问题
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先确认包来自你拥有或获授权分析的小程序。不要上传包含第三方源码、密钥、个人信息或公司数据的 wxapkg。
+  - type: input
+    id: version
+    attributes:
+      label: 提交版本
+      description: 请填写 `git rev-parse --short HEAD` 的输出。
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js 版本
+      description: 请填写 `node --version` 的输出。
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - 其他
+    validations:
+      required: true
+  - type: dropdown
+    id: package_state
+    attributes:
+      label: 包的状态
+      options:
+        - Android 端获取的未加密包
+        - PC 端获取且已由有权使用的工具解密
+        - 不确定是否加密
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: 执行命令
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 完整错误日志
+      description: 请删除用户名、绝对路径、AppID、密钥和业务数据。
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现说明
+      description: 说明稳定复现步骤；优先提供自行构造的最小样例，不要上传第三方小程序包。
+    validations:
+      required: true
+  - type: checkboxes
+    id: authorization
+    attributes:
+      label: 授权确认
+      options:
+        - label: 我确认有权分析相关包，且报告中不包含敏感或未经授权的数据。
+          required: true
