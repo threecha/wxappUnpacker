@@ -1,65 +1,15 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-install_dependency()
-{
-echo "1. install dependency"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-sudo npm install esprima -g
-sudo npm install css-tree -g
-sudo npm install cssbeautify -g
-sudo npm install vm2 -g
-sudo npm install uglify-es -g
-sudo npm install js-beautify -g
-sudo npm install escodegen -g
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Node.js 22 or newer and npm are required." >&2
+  exit 1
+fi
 
-echo "2. npm list"
-npm list esprima
-npm list css-tree
-npm list cssbeautify
-npm list vm2
-npm list uglify-es
-npm list js-beautify
-npm list escodegen
+node -e 'const major=Number(process.versions.node.split(".")[0]); if (major < 22) { console.error("Node.js 22 or newer is required."); process.exit(1); }'
+npm ci
 
-# echo "3. npm install"
-# npm install
-	return 0;
-}
-
-install_npm()
-{
-echo "install node"
-brew install node
-echo "node versin is"
-node -v
-echo "npm versin is"
-npm -v
-echo "install n"
-npm i -g n
-echo "update to stable"
-n stable
-npm i npm
-
-# npm i handlebars --reg=https://registry.npmjs.org
-	return 0;
-}
-
-check_menu()
-{
-    menu=$1
-    args=$2
-    param=$3
-
-  if [ "-npm" == "$1" ]
-   then  install_npm $args $param
-      elif [ "-dpc" == "$1" ]
-    then
-     install_dependency $args $param
-   else
-    install_dependency $1 $2
-   fi
-   	return 0;
-}
-
-# 菜单
-check_menu $1 $2 $3
+echo "Dependencies installed locally with Node.js $(node --version)."

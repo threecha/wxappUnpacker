@@ -1,41 +1,27 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-# MyWxappUnpacker 项目路径
-WXAPPUNPACKER_PATH=`pwd`
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
-FILE_FORMAT=wxapkg
+if [[ -z "${1:-}" ]]; then
+  echo "Usage: $0 <file.wxapkg|directory> [unpacker option]" >&2
+  exit 2
+fi
 
-wxappUnpacker_pkg() {
-  echo "node ${WXAPPUNPACKER_PATH}/wuWxapkg.js ${fname}"
-  node ${WXAPPUNPACKER_PATH}/wuWxapkg.js $2 $1
-  return 0;
-}
+target="$1"
+option="${2:-}"
 
-wxappUnpacker() {
-  de_dir=$1
-    if [ -z "$1" ]
-      then
-        de_dir=`pwd`
-      fi
-  echo "${de_dir}"
-  echo "for wxapkg in `find ${de_dir} -name "*.${FILE_FORMAT}"`"
-  for fname in `find ${de_dir} -name "*.${FILE_FORMAT}"`
-    do
-      wxappUnpacker_pkg ${fname} $2
-    done
-  return 0;
-}
+if [[ -d "$target" ]]; then
+  exec "$SCRIPT_DIR/de_miniapp.sh" "$target"
+fi
 
-de_pkg() {
-  if [ "-d" == "$1" ]
-    then
-      wxappUnpacker $1 $2
-    else
-      wxappUnpacker_pkg $1 $2
-    fi
-  return 0;
-}
-# $1: pkg file or pkg dir; $2: order
-de_pkg $1 $2
+if [[ ! -f "$target" ]]; then
+  echo "Package does not exist: $target" >&2
+  exit 1
+fi
 
-
+if [[ -n "$option" ]]; then
+  exec node "$SCRIPT_DIR/wuWxapkg.js" "$option" "$target"
+else
+  exec node "$SCRIPT_DIR/wuWxapkg.js" "$target"
+fi

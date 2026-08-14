@@ -4,7 +4,7 @@ const {wxsBeautify} = require("./wuJs.js");
 const fs = require('fs');
 const path = require("path");
 const esprima = require('esprima');
-const {VM} = require('vm2');
+const {createVM} = require("./wuSandbox.js");
 const escodegen = require('escodegen');
 
 function analyze(core, z, namePool, xPool, fakePool = {}, zMulName = "0") {
@@ -384,14 +384,12 @@ function doFrame(name, cb, order, mainDir) {
             let endOfRequire = code.indexOf("()\r\n") + 4;
             if (endOfRequire == 4 - 1) endOfRequire = code.indexOf("()\n") + 3;
             code = code.slice(endOfRequire);
-            let rD = {}, rE = {}, rF = {}, requireInfo = {}, x, vm = new VM({
-                sandbox: {
+            let rD = {}, rE = {}, rF = {}, requireInfo = {}, x, vm = createVM({
                     d_: rD, e_: rE, f_: rF, _vmRev_(data) {
                         [x, requireInfo] = data;
                     }, nv_require(path) {
                         return () => path;
                     }
-                }
             });
             let vmCode = code + "\n_vmRev_([x," + json + "])";
             vm.run(vmCode);

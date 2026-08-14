@@ -1,13 +1,13 @@
 const wu = require("./wuLib.js");
 const path = require("path");
 const fs = require("fs");
-const {VM} = require('vm2');
+const {createVM} = require("./wuSandbox.js");
 const cssbeautify = require('cssbeautify');
 const csstree = require('css-tree');
 const cheerio = require('cheerio');
 
 function chomp_balanced(input_str, scan_start, open_char, close_char) {
-    quote_chars = ['\"', '\''];
+    const quote_chars = ['\"', '\''];
     let now = scan_start - 1;
     let depth = 0;
     let in_quote = false;
@@ -167,15 +167,13 @@ function doWxss(dir, cb, mainDir, nowDir) {
 
     function runVM(name, code) {
         let wxAppCode = {}, handle = {cssFile: name};
-        let vm = new VM({
-            sandbox: Object.assign(new GwxCfg(), {
+        let vm = createVM(Object.assign(new GwxCfg(), {
                 __wxAppCode__: wxAppCode,
                 setCssToHead: cssRebuild.bind(handle),
                 $gwx(path, global) {
 
                 }
-            })
-        });
+            }));
 
         // console.log('do css runVm: ' + name);
         vm.run(code);
@@ -227,7 +225,7 @@ function doWxss(dir, cb, mainDir, nowDir) {
             if (node.children) {
                 const removeType = ["webkit", "moz", "ms", "o"];
                 let list = {};
-                node.children.each((son, item) => {
+                node.children.forEach((son, item) => {
                     if (son.type == "Declaration") {
                         if (list[son.property]) {
                             let a = item, b = list[son.property], x = son, y = b.data, ans = null;
@@ -328,12 +326,7 @@ function doWxss(dir, cb, mainDir, nowDir) {
             // mainCode = mainCode.substr(0, wxAppCodeVarDeclareIndex) + mainCode.substr(wxAppCodeVarDeclareEnd);
 
             code = code.slice(code.lastIndexOf('var setCssToHead = function(file, _xcInvalid'));
-            code = code.slice(code.lastIndexOf('\nvar _C= ') + 1);
-            //let oriCode=code;
-            code = code.slice(0, code.indexOf('\n'));
-            let vm = new VM({sandbox: {}});
-            // pureData = vm.run(code + "\n_C");
-            pureData = vm.run(code + "}");
+            pureData = parsePureData(code);
             //let mainCode=oriCode.slice(oriCode.indexOf("setCssToHead"),oriCode.lastIndexOf(";var __pageFrameEndTime__"));
             console.log("Guess wxss(first turn)...");
             preRun(dir, frameFile, mainCode, files, () => {
@@ -372,7 +365,14 @@ function doWxss(dir, cb, mainDir, nowDir) {
     });
 }
 
-module.exports = {doWxss: doWxss};
+function parsePureData(source) {
+    const markerIndex = source.lastIndexOf("var _C=");
+    if (markerIndex === -1) throw new Error("Cannot find the generated _C style table.");
+    const declaration = source.slice(markerIndex).split(/\r?\n/, 1)[0];
+    return createVM({}).run(declaration + "\n_C");
+}
+
+module.exports = {doWxss: doWxss, parsePureData: parsePureData};
 if (require.main === module) {
     wu.commandExecute(doWxss, "Restore wxss files.\n\n<dirs...>\n\n<dirs...> restore wxss file from a unpacked directory(Have page-frame.html (or app-wxss.js) and other html file).");
 }

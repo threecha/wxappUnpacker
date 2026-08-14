@@ -1,8 +1,8 @@
 const wu = require("./wuLib.js");
 const path = require("path");
-const UglifyJS = require("uglify-es");
+const UglifyJS = require("uglify-js");
 const {js_beautify} = require("js-beautify");
-const {VM} = require('vm2');
+const {createVM} = require("./wuSandbox.js");
 
 function jsBeautify(code) {
     return UglifyJS.minify(code, {mangle: false, compress: false, output: {beautify: true, comments: true}}).code;
@@ -16,8 +16,7 @@ function splitJs(name, cb, mainDir) {
     }
     wu.get(name, code => {
         let needDelList = {};
-        let vm = new VM({
-            sandbox: {
+        let vm = createVM({
                 require() {
                 },
                 define(name, func) {
@@ -39,7 +38,6 @@ function splitJs(name, cb, mainDir) {
                 },
                 requirePlugin() {
                 }
-            }
         });
         if (isSubPkg) {
             code = code.slice(code.indexOf("define("));
