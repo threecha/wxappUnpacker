@@ -1,28 +1,39 @@
 {
   "name": "wxapp-unpacker",
   "version": "6.8.0",
-  "description": "Wechat App(微信小程序, .wxapkg)解包及相关文件(.wxss, .json, .wxs, .wxml)还原工具",
+  "description": "基于 Node.js 的微信小程序 .wxapkg 解包与资源还原工具",
   "main": "wuWxapkg.js",
+  "scripts": {
+    "unpack": "node wuWxapkg.js",
+    "check": "node scripts/check-syntax.js",
+    "test": "node --test",
+    "audit": "npm audit --omit=dev --audit-level=high"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qwerty472123/wxappUnpacker.git"
+    "url": "git+https://github.com/threecha/wxappUnpacker.git"
   },
-  "author": "qwerty472123",
+  "author": "threecha <threecha@163.com>",
+  "contributors": [
+    "qwerty472123"
+  ],
   "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/qwerty472123/wxappUnpacker/issues"
+    "url": "https://github.com/threecha/wxappUnpacker/issues"
   },
-  "homepage": "https://github.com/qwerty472123/wxappUnpacker#readme",
+  "homepage": "https://github.com/threecha/wxappUnpacker#readme",
   "dependencies": {
-    "cheerio": "^1.0.0-rc.2",
-    "css-tree": "^1.0.0-alpha.28",
+    "cheerio": "^1.2.0",
+    "css-tree": "^3.2.1",
     "cssbeautify": "^0.3.1",
-    "escodegen": "^1.11.0",
-    "esprima": "^4.0.0",
-    "handlebars": "^4.1.0",
-    "js-beautify": "^1.8.9",
-    "npm": "^6.9.0",
-    "uglify-es": "^3.3.9",
-    "vm2": "^3.6.10"
+    "escodegen": "^2.1.0",
+    "esprima": "^4.0.1",
+    "handlebars": "^4.7.9",
+    "js-beautify": "^2.0.3",
+    "uglify-js": "^3.19.3",
+    "vm2": "^3.11.5"
   }
 }

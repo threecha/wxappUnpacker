@@ -1,17 +1,23 @@
-﻿bin/
-obj/
-gen/
-.ant-targets-build.xml
-project.properties
-auto.prop
-.classpath
-.settings/
-*.iml
+# Dependencies and package-manager output
+node_modules/
+npm-debug.log*
 
+# Generated unpacking output
+*.wxapkg
+__wuBaseWxss__/
+
+# Test and coverage output
+coverage/
+.nyc_output/
+
+# Editors and operating systems
+.DS_Store
 .idea/
-local.properties
-build.xml
-6.1-main.iml
-.gradle/
-build/
-captures/
+.vscode/
+*.iml
+*.swp
+
+# Local environment files
+.env
+.env.*
+!.env.example

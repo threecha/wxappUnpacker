@@ -6,7 +6,20 @@ const wuSs = require("./wuWxss.js");
 const path = require("path");
 const fs = require("fs");
 
+const HEADER_LENGTH = 14;
+
+class WxapkgFormatError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "WxapkgFormatError";
+        this.code = "ERR_WXAPKG_FORMAT";
+    }
+}
+
 function header(buf) {
+    if (!Buffer.isBuffer(buf) || buf.length < HEADER_LENGTH) {
+        throw new WxapkgFormatError(`Package is too short: expected at least ${HEADER_LENGTH} bytes.`);
+    }
     console.log("\nHeader info:");
     let firstMark = buf.readUInt8(0);
     console.log("  firstMark: 0x%s", firstMark.toString(16));
@@ -18,34 +31,121 @@ function header(buf) {
     console.log("  dataLength: ", dataLength);
     let lastMark = buf.readUInt8(13);
     console.log("  lastMark: 0x%s", lastMark.toString(16));
-    if (firstMark != 0xbe || lastMark != 0xed) throw Error("Magic number is not correct!");
-    return [infoListLength, dataLength];
+    if (firstMark !== 0xbe || lastMark !== 0xed) {
+        throw new WxapkgFormatError("Invalid wxapkg magic number. The package may be encrypted, damaged, or use an unsupported format.");
+    }
+    if (infoListLength < 4) {
+        throw new WxapkgFormatError("Invalid file-list length: the list must include a file count.");
+    }
+    const expectedLength = HEADER_LENGTH + infoListLength + dataLength;
+    if (expectedLength !== buf.length) {
+        throw new WxapkgFormatError(`Package length mismatch: header declares ${expectedLength} bytes, received ${buf.length}.`);
+    }
+    return {infoListLength, dataLength};
 }
 
-function genList(buf) {
+function ensureReadable(buf, offset, length, label) {
+    if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > buf.length) {
+        throw new WxapkgFormatError(`Invalid ${label}: file-list data is truncated or out of bounds.`);
+    }
+}
+
+function normalizeArchivePath(name) {
+    if (typeof name !== "string" || name.length === 0 || name.includes("\0")) {
+        throw new WxapkgFormatError("Archive contains an empty or invalid file name.");
+    }
+    const portableName = name.replace(/\\/g, "/");
+    if (/^[A-Za-z]:/.test(portableName) || portableName.startsWith("//")) {
+        throw new WxapkgFormatError(`Archive contains an absolute file path: ${JSON.stringify(name)}.`);
+    }
+
+    // wxapkg uses one leading slash as an archive-root marker, not an OS path.
+    const relativeName = portableName.startsWith("/") ? portableName.slice(1) : portableName;
+    const parts = relativeName.split("/");
+    if (parts.length === 0 || parts.some(part => part === "" || part === "." || part === "..")) {
+        throw new WxapkgFormatError(`Archive contains an unsafe file path: ${JSON.stringify(name)}.`);
+    }
+    return parts.join(path.sep);
+}
+
+function safeOutputPath(dir, name) {
+    const root = path.resolve(dir);
+    const target = path.resolve(root, normalizeArchivePath(name));
+    const relative = path.relative(root, target);
+    if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) {
+        throw new WxapkgFormatError(`Archive path escapes the output directory: ${JSON.stringify(name)}.`);
+    }
+    return target;
+}
+
+function assertNoSymlinkPath(root, target) {
+    if (fs.existsSync(root) && fs.lstatSync(root).isSymbolicLink()) {
+        throw new WxapkgFormatError(`Refusing to write through a symbolic link: ${root}.`);
+    }
+    const relativeParts = path.relative(root, target).split(path.sep);
+    let current = root;
+    for (const part of relativeParts) {
+        current = path.join(current, part);
+        if (!fs.existsSync(current)) break;
+        if (fs.lstatSync(current).isSymbolicLink()) {
+            throw new WxapkgFormatError(`Refusing to write through a symbolic link: ${current}.`);
+        }
+    }
+}
+
+function genList(buf, infoListLength, dataLength) {
     console.log("\nFile list info:");
-    let fileCount = buf.readUInt32BE(0);
+    const listStart = HEADER_LENGTH;
+    const listEnd = listStart + infoListLength;
+    const dataStart = listEnd;
+    const dataEnd = dataStart + dataLength;
+    const listBuffer = buf.subarray(listStart, listEnd);
+    ensureReadable(listBuffer, 0, 4, "file count");
+    let fileCount = listBuffer.readUInt32BE(0);
     console.log("  fileCount: ", fileCount);
     let fileInfo = [], off = 4;
     for (let i = 0; i < fileCount; i++) {
         let info = {};
-        let nameLen = buf.readUInt32BE(off);
+        ensureReadable(listBuffer, off, 4, `name length for entry ${i}`);
+        let nameLen = listBuffer.readUInt32BE(off);
         off += 4;
-        info.name = buf.toString('utf8', off, off + nameLen);
+        ensureReadable(listBuffer, off, nameLen, `name for entry ${i}`);
+        info.name = listBuffer.toString('utf8', off, off + nameLen);
         off += nameLen;
-        info.off = buf.readUInt32BE(off);
+        ensureReadable(listBuffer, off, 8, `offset and size for entry ${i}`);
+        info.off = listBuffer.readUInt32BE(off);
         off += 4;
-        info.size = buf.readUInt32BE(off);
+        info.size = listBuffer.readUInt32BE(off);
         off += 4;
+        if (info.off < dataStart || info.off + info.size > dataEnd) {
+            throw new WxapkgFormatError(`File data for ${JSON.stringify(info.name)} is outside the declared data section.`);
+        }
         fileInfo.push(info);
+    }
+    if (off !== listBuffer.length) {
+        throw new WxapkgFormatError(`File-list length mismatch: parsed ${off} bytes, declared ${listBuffer.length}.`);
     }
     return fileInfo;
 }
 
 function saveFile(dir, buf, list) {
     console.log("Saving files...");
-    for (let info of list)
-        wu.save(path.resolve(dir, (info.name.startsWith("/") ? "." : "") + info.name), buf.slice(info.off, info.off + info.size));
+    const targets = new Set();
+    const validated = list.map(info => {
+        const target = safeOutputPath(dir, info.name);
+        assertNoSymlinkPath(path.resolve(dir), target);
+        const targetKey = process.platform === "win32" || process.platform === "darwin"
+            ? target.normalize("NFC").toLowerCase()
+            : target;
+        if (targets.has(targetKey)) {
+            throw new WxapkgFormatError(`Archive contains a duplicate output path: ${JSON.stringify(info.name)}.`);
+        }
+        targets.add(targetKey);
+        return {info, target};
+    });
+    for (const {info, target} of validated) {
+        wu.save(target, buf.subarray(info.off, info.off + info.size));
+    }
 }
 
 function packDone(dir, cb, order) {
@@ -183,14 +283,28 @@ function doFile(name, cb, order) {
     console.log("Unpack file " + name + "...");
     let dir = path.resolve(name, "..", path.basename(name, ".wxapkg"));
     wu.get(name, buf => {
-        let [infoListLength, dataLength] = header(buf.slice(0, 14));
-        if (order.includes("o")) wu.addIO(console.log.bind(console), "Unpack done.");
+        let {infoListLength, dataLength} = header(buf);
+        const fileList = genList(buf, infoListLength, dataLength);
+        if (order.includes("o")) wu.addIO(() => {
+            console.log("Unpack done.");
+            cb();
+        });
         else wu.addIO(packDone, dir, cb, order);
-        saveFile(dir, buf, genList(buf.slice(14, infoListLength + 14)));
+        saveFile(dir, buf, fileList);
     }, {});
 }
 
-module.exports = {doFile: doFile};
+module.exports = {
+    HEADER_LENGTH,
+    WxapkgFormatError,
+    assertNoSymlinkPath,
+    doFile,
+    genList,
+    header,
+    normalizeArchivePath,
+    safeOutputPath,
+    saveFile
+};
 if (require.main === module) {
-    wu.commandExecute(doFile, "Unpack a wxapkg file.\n\n[-o] [-d] [-s=<Main Dir>] <files...>\n\n-d Do not delete transformed unpacked files.\n-o Do not execute any operation after unpack.\n-s=<Main Dir> Regard all packages provided as subPackages and\n              regard <Main Dir> as the directory of sources of the main package.\n<files...> wxapkg files to unpack");
+    wu.commandExecute(doFile, "Unpack a wxapkg file.\n\n[-o] [-d] [-f] [-s=<Main Dir>] <files...>\n\n-d, --keep-intermediate  Do not delete transformed intermediate files.\n-o, --output-only        Do not execute any operation after unpack.\n-f, --fast               Process multiple packages concurrently.\n-s=<Main Dir>            Regard inputs as subpackages of <Main Dir>.\n--main-dir=<Main Dir>    Long form of -s=<Main Dir>.\n-h, --help               Show this help.\n-v, --version            Show the package version.\n<files...>               One or more wxapkg files to unpack.");
 }

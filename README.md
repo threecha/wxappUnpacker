@@ -1,140 +1,187 @@
-# MyWxAppUnpacker
+# wxappUnpacker
 
-![版本 0.3](https://img.shields.io/badge/版本-0.3-red.svg) ![支持的微信版本 >20180111](https://img.shields.io/badge/%E5%BE%AE%E4%BF%A1%E7%89%88%E6%9C%AC-%3E=20180111-brightgreen.svg)
+[![CI](https://github.com/threecha/wxappUnpacker/actions/workflows/ci.yml/badge.svg)](https://github.com/threecha/wxappUnpacker/actions/workflows/ci.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Node.js 22+](https://img.shields.io/badge/Node.js-%3E%3D22-339933.svg)](https://nodejs.org/)
 
-> Wechat App(微信小程序, .wxapkg)解包及相关文件(.wxss, .json, .wxs, .wxml)还原工具
+基于 Node.js 的微信小程序 `.wxapkg` 解包与资源还原工具。项目可以提取包内文件，并尝试还原 JavaScript、JSON、WXML、WXSS 和 WXS；支持主包、分包和批量处理。
 
-## update 
-本人也是开源工具获益者，在使用工具其中发现的一些问题做了顺手修复
+> 本项目只用于学习、调试、兼容性研究以及分析你自己拥有或已获明确授权的小程序。请遵守软件许可、平台规则和适用法律，不要提取、传播或使用未经授权的代码、数据、密钥及个人信息。
 
-主要修复如下问题
-1. upexpected end of input 「这个问题修正后会出现问题2」
-2. 修复抛出异常bridge.from异常。
-3. 有些包在解包时候报错 纠正wxml和 wxss时候报错。可能是由于包被加密了 需要先用解密工具解密一下。「解密工具可见首页另一个项目」
+## 项目状态
 
-![Alt text](image.png)
-![Alt text](image-1.png)
-## 1. 说明
+微信小程序编译产物会随微信版本变化，因此资源“还原”不是无损反编译，部分新格式可能无法处理。遇到错误时，请先用 `-o` 验证原始文件能否安全解包，再判断问题属于包加密、包格式还是后续资源还原。
 
-- 本文是基于 [wxappUnpacker](https://github.com/qwerty472123/wxappUnpacker "wxappUnpacker") 创作的。
-> - [x] 修复 “ReferenceError: $gwx is not defined” 和 extract wxss 等问题
-> - [x] 支持分包
-> - [x] 支持一键解包
-> - [x] 支持一键安装各种依赖
+本维护版本主要包含：
 
-一键匹配、统计文本中的内容，请下载 [calcwords](https://github.com/larack8/calcwords "calcwords") 。
+- 严格校验 wxapkg 包头、文件表、数据偏移和输出路径。
+- 修复部分 `$gwx`、WXSS、分包配置和 VM 执行错误。
+- 支持单包、多包、批量目录及主包/分包合并。
+- 使用本地 npm 依赖，并在 Node.js 22、24 上持续测试。
 
-### 2. wxapkg 包的获取
+## 环境要求
 
-Android 手机最近使用过的微信小程序所对应的 wxapkg 包文件都存储在特定文件夹下，可通过以下命令查看：
+- Node.js 22 或更高版本；推荐当前 LTS 版本。
+- npm（随 Node.js 提供）。
+- `bingo.sh`、`de_miniapp.sh` 和 `install.sh` 需要 Bash；Windows 用户可直接运行 Node.js 命令。
 
-    adb pull /data/data/com.tencent.mm/MicroMsg/{User}/appbrand/pkg ./
-
-其中`{User}` 为当前用户的用户名，类似于 `2bc**************b65`。
-
-## 3. 用法
-
-用法分 mac 和 windows，请根据系统来操作
-
-### 1. for Mac OS (Mac操作系统)
-
-- 安装npm和node
+## 安装
 
 ```bash
-./install.sh -npm
+git clone https://github.com/threecha/wxappUnpacker.git
+cd wxappUnpacker
+npm ci
 ```
 
-- 安装依赖
+macOS 或 Linux 也可以运行：
 
 ```bash
 ./install.sh
 ```
 
-- 解包某个小程序
+安装脚本只执行项目本地的 `npm ci`，不会使用 `sudo`，也不会全局安装依赖。
+
+## 使用方法
+
+### 解包并还原资源
+
+macOS、Linux：
 
 ```bash
-./de_miniapp.sh  -d 小程序包路径(.wxapkg格式)
+node wuWxapkg.js ./path/to/app.wxapkg
 ```
 
-- 一键解文件夹下所有小程序
+Windows PowerShell：
+
+```powershell
+node .\wuWxapkg.js C:\path\to\app.wxapkg
+```
+
+也可以通过 npm 运行：
 
 ```bash
-./de_miniapp.sh  小程序包所在文件夹
+npm run unpack -- ./path/to/app.wxapkg
 ```
 
-- 一键解当前文件夹下所有小程序
+默认在包文件旁创建同名目录。例如 `demo.wxapkg` 的输出目录为 `demo/`。
+
+### 只提取原始文件
+
+`-o` 或 `--output-only` 跳过 JavaScript/WXML/WXSS 执行和还原步骤，适合先验证包格式：
 
 ```bash
-./de_miniapp.sh
+node wuWxapkg.js -o ./path/to/app.wxapkg
 ```
 
-** 举例
-
-Mac OS
-```bash
-./de_miniapp.sh -d ./testpkg/_-751579163_42.wxapkg
-```
-
-![解包后的目录文件](testpkg/testdir.png)
-
-### 2. for 通用操作系统（Windows 和 Mac）
-
-- 解包某个小程序
+### 同时处理多个包
 
 ```bash
-node wuWxapkg.js 小程序包路径(.wxapkg格式)
+node wuWxapkg.js -o ./first.wxapkg ./second.wxapkg
 ```
 
-** 举例
+添加 `-f` 或 `--fast` 可并行处理多个输入；并行模式会增加 CPU 和内存占用。
+
+### 主包与分包
+
+先解包主包，再通过 `-s=<主包输出目录>` 解包分包：
 
 ```bash
-node wuWxapkg.js testpkg\_-751579163_42.wxapkg
+node wuWxapkg.js ./packages/main.wxapkg
+node wuWxapkg.js -s=./packages/main ./packages/subpackage.wxapkg
 ```
 
-- 分包功能
-
-当检测到 wxapkg 为子包时, 添加-s 参数指定主包源码路径即可自动将子包的 wxss,wxml,js 解析到主包的对应位置下. 完整流程大致如下: 
-1. 获取主包和若干子包
-2. 解包主包 `./bingo.sh testpkg/master-xxx.wxapkg`
-3. 解包子包 `./bingo.sh testpkg/sub-1-xxx.wxapkg -s=../master-xxx`
-
-TIP
-> -s 参数可为相对路径或绝对路径, 推荐使用绝对路径, 因为相对路径的起点不是当前目录 而是子包解包后的目录
-
-```
-├── testpkg
-│   ├── sub-1-xxx.wxapkg #被解析子包
-│   └── sub-1-xxx               #相对路径的起点
-│       ├── app-service.js
-│   ├── master-xxx.wxapkg
-│   └── master-xxx             # ../master-xxx 就是这个目录
-│       ├── app.json
-```
-
-### 4. 提取统计WXSS或者其他样式
-
-`详情参照` [calcwords](https://github.com/larack8/calcwords "calcwords")
-
-1. 下载calcwords源码
+等价的长参数为：
 
 ```bash
-git clone https://github.com/larack8/calcwords
+node wuWxapkg.js --main-dir=./packages/main ./packages/subpackage.wxapkg
 ```
 
-2. 设置统计的.wxapkg路径和输入结果路径，调用 calcWxssStyle
+主包目录可以是绝对路径或相对于当前终端目录的路径。
+
+### Bash 辅助脚本
+
+处理单个包：
 
 ```bash
-	public static void testCalcWords() throws IOException {
-		String fromFilePath = "/Users/Shared/my_git/java/CalcWords/testletters/";
-		String resultFilePath = "/Users/Shared/my_git/java/CalcWords/result.txt";
-
-		calcWxssStyle(fromFilePath, resultFilePath);// 统计微信小程序源码WWXSS样式
-//		calcWxssProperty(fromFilePath, resultFilePath);// 统计微信小程序源码WXSS属性
-	}
+./de_miniapp.sh -d ./path/to/app.wxapkg
 ```
 
-3. 打开输出结果文件
+递归处理目录中的所有 `.wxapkg`：
 
-如下图样式
+```bash
+./de_miniapp.sh ./packages
+```
 
-![输出结果文件](testpkg/cc.png)
+兼容旧用法：
+
+```bash
+./bingo.sh ./packages/main.wxapkg
+./bingo.sh ./packages/subpackage.wxapkg -s=./packages/main
+```
+
+### 参数列表
+
+| 参数 | 作用 |
+| --- | --- |
+| `-o`, `--output-only` | 只解包，不执行后续资源还原 |
+| `-d`, `--keep-intermediate` | 保留还原过程中通常会删除的中间文件 |
+| `-f`, `--fast` | 并行处理多个输入包 |
+| `-s=<目录>`, `--main-dir=<目录>` | 将输入视为分包并写入指定主包目录 |
+| `-h`, `--help` | 显示帮助 |
+| `-v`, `--version` | 显示版本 |
+
+## wxapkg 的获取与加密
+
+Android 设备在满足授权和系统访问条件时，可以从微信应用数据目录取得小程序包。不同系统、微信版本及设备权限下的目录和访问方式可能不同。
+
+PC 微信产生的 `__APP__.wxapkg` 经常是加密容器。出现下面的错误通常意味着包仍被加密、文件损坏，或使用了暂不支持的新格式：
+
+```text
+Invalid wxapkg magic number. The package may be encrypted, damaged, or use an unsupported format.
+```
+
+本仓库不附带来源不明的解密程序，也不提供绕过访问控制的功能。请只使用你有权使用且来源可信的方式取得可分析文件。
+
+## 安全说明
+
+资源还原过程需要执行包内生成的 JavaScript。项目使用 `vm2` 并默认启用以下限制：
+
+- 单次 VM 执行超时：10 秒。
+- 禁止异步任务。
+- 单次 Buffer 分配上限：32 MiB。
+
+可在特殊情况下调整：
+
+```bash
+WXAPP_VM_TIMEOUT_MS=20000 WXAPP_VM_BUFFER_LIMIT_MB=64 node wuWxapkg.js app.wxapkg
+```
+
+允许范围分别是 100–60000 毫秒和 1–256 MiB。`vm2` 是同一 Node.js 进程内的隔离层，不应作为唯一安全边界。处理未知或不可信包时，请在没有公司凭据、私钥和敏感文件的容器或一次性虚拟机中运行。参见 [vm2 安全说明](https://github.com/patriksimek/vm2#important-security-disclaimer)。
+
+## 常见问题
+
+### `Magic number` 错误
+
+先确认文件是否为完整、已解密且受支持的 wxapkg。该校验不能也不应该通过删除判断来绕过。
+
+### `subPackage.pages is not iterable`
+
+当前版本会保留分包的其他元数据，将异常的 `pages` 值按空数组处理并输出警告。如果仍缺少页面，请在 Issue 中提供脱敏后的 `app-config.json` 结构。
+
+### 没有生成 `app.json` 或部分 WXML/WXSS
+
+先运行 `node wuWxapkg.js -o <包>`。若原始解包成功而还原失败，请保留完整错误日志和 Node.js 版本；不要上传第三方完整小程序包。
+
+### 提交错误报告
+
+请使用仓库的 [Issue 模板](https://github.com/threecha/wxappUnpacker/issues/new/choose)，提供系统、Node.js 版本、提交 SHA、执行命令和脱敏日志。
+
+## 技术资料与致谢
+
+- 本项目基于 [qwerty472123/wxappUnpacker](https://github.com/qwerty472123/wxappUnpacker) 的工作继续维护。
+- 更早的实现细节和格式分析见 [DETAILS.md](DETAILS.md)。
+- 感谢所有上游作者、问题报告者和贡献者。
+
+## 许可证
+
+本项目按 [GNU General Public License v3.0 or later](LICENSE) 发布。仓库许可证不改变输入小程序及其资源各自的版权和许可状态。

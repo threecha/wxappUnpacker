@@ -2,13 +2,36 @@ const wu = require("./wuLib.js");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const {VM} = require('vm2');
+const {createVM} = require("./wuSandbox.js");
+
+function normalizeSubPackage(subPackage, pages, index = 0) {
+    const normalized = {...subPackage};
+    let root = typeof normalized.root === "string" ? normalized.root : "";
+    root = root.replace(/^\/+/, "");
+    if (root && !root.endsWith("/")) root += "/";
+
+    let sourcePages = normalized.pages;
+    if (!Array.isArray(sourcePages)) {
+        console.warn(`Ignore invalid subPackages[${index}].pages: expected an array.`);
+        sourcePages = [];
+    }
+
+    normalized.root = root;
+    normalized.pages = sourcePages.map(page => {
+        const pageName = String(page).replace(/^\/+/, "");
+        const relativePage = root && pageName.startsWith(root) ? pageName.slice(root.length) : pageName;
+        const fullPage = root + relativePage;
+        const pageIndex = pages.indexOf(fullPage);
+        if (pageIndex !== -1) pages.splice(pageIndex, 1);
+        return relativePage;
+    });
+    return normalized;
+}
 
 function getWorkerPath(name) {
     let code = fs.readFileSync(name, {encoding: 'utf8'});
     let commPath = false;
-    let vm = new VM({
-        sandbox: {
+    let vm = createVM({
             require() {
             },
             define(name) {
@@ -16,7 +39,6 @@ function getWorkerPath(name) {
                 if (commPath === false) commPath = name;
                 commPath = wu.commonDir(commPath, name);
             }
-        }
     });
     vm.run(code.slice(code.indexOf("define(")));
     if (commPath.length > 0) commPath = commPath.slice(0, -1);
@@ -35,29 +57,8 @@ function doConfig(configFile, cb) {
         if (e.subPackages) {
             let subPackages = [];
             let pages = app.pages;
-            for (let subPackage of e.subPackages) {
-                let root = subPackage.root;
-                let lastChar = root.substr(root.length - 1, 1);
-                if (lastChar !== '/') {
-                    root = root + '/';
-                }
-                let firstChar = root.substr(0, 1);
-                if (firstChar === '/') {
-                    root = root.substring(1);
-                }
-                let newPages = [];
-                for (let page of subPackage.pages) {
-                    let items = page.replace(root, '');
-                    newPages.push(items);
-                    let subIndex = pages.indexOf(root + items);
-                    console.log(root + items, subIndex);
-                    if (subIndex!==-1) {
-                        pages.splice(subIndex, 1);
-                    }
-                }
-                subPackage.root = root;
-                subPackage.pages = newPages;
-                subPackages.push(subPackage);
+            for (let [index, subPackage] of e.subPackages.entries()) {
+                subPackages.push(normalizeSubPackage(subPackage, pages, index));
             }
             app.subPackages = subPackages;
             app.pages = pages;
@@ -85,11 +86,9 @@ function doConfig(configFile, cb) {
             let matches = fs.readFileSync(path.resolve(dir, "app-service.js"), {encoding: 'utf8'}).match(/\_\_wxAppCode\_\_\['[^\.]+\.json[^;]+\;/g);
             if (matches) {
                 let attachInfo = {};
-                (new VM({
-                    sandbox: {
+                createVM({
                         __wxAppCode__: attachInfo
-                    }
-                })).run(matches.join(""));
+                }).run(matches.join(""));
                 for (let name in attachInfo) e.page[wu.changeExt(name, ".html")] = {window: attachInfo[name]};
             }
         }
@@ -153,7 +152,7 @@ function doConfig(configFile, cb) {
     });
 }
 
-module.exports = {doConfig: doConfig};
+module.exports = {doConfig: doConfig, normalizeSubPackage: normalizeSubPackage};
 if (require.main === module) {
     wu.commandExecute(doConfig, "Split and make up weapp app-config.json file.\n\n<files...>\n\n<files...> app-config.json files to split and make up.");
 }

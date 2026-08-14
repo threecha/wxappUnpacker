@@ -165,35 +165,57 @@ function commonDir(pathA, pathB) {
 }
 
 function commandExecute(cb, helper) {
+    const aliases = new Map([
+        ["--output-only", "o"],
+        ["--keep-intermediate", "d"],
+        ["--fast", "f"]
+    ]);
+    const args = process.argv.slice(2);
+    if (args.includes("--help") || args.includes("-h")) {
+        console.log("Command Line Helper:\n\n" + helper);
+        return;
+    }
+    if (args.includes("--version") || args.includes("-v")) {
+        console.log(require("./package.json").version);
+        return;
+    }
+
+    const orders = [];
+    const inputs = [];
+    for (const arg of args) {
+        if (aliases.has(arg)) orders.push(aliases.get(arg));
+        else if (arg.startsWith("--main-dir=")) orders.push("s=" + arg.slice("--main-dir=".length));
+        else if (arg.startsWith("--")) throw new Error(`Unknown option: ${arg}`);
+        else if (arg.startsWith("-")) orders.push(arg.slice(1));
+        else inputs.push(arg);
+    }
+    if (inputs.length === 0) {
+        console.log("Command Line Helper:\n\n" + helper);
+        return;
+    }
+
     console.time("Total use");
 
     function endTime() {
         ioEvent.check(() => console.timeEnd("Total use"));
     }
 
-    let orders = [];
-    for (let order of process.argv) if (order.startsWith("-")) orders.push(order.slice(1));
-    let iter = process.argv[Symbol.iterator](), nxt = iter.next(), called = false, faster = orders.includes("f"),
-        fastCnt;
+    let current = 0, faster = orders.includes("f"), fastCnt;
     if (faster) {
         fastCnt = new CntEvent;
         fastCnt.add(endTime);
     }
 
     function doNext() {
-        let nxt = iter.next();
-        while (!nxt.done && nxt.value.startsWith("-")) nxt = iter.next();
-        if (nxt.done) {
-            if (!called) console.log("Command Line Helper:\n\n" + helper);
-            else if (!faster) endTime();
+        if (current >= inputs.length) {
+            if (!faster) endTime();
         } else {
-            called = true;
-            if (faster) fastCnt.encount(), cb(nxt.value, fastCnt.decount, orders), doNext();
-            else cb(nxt.value, doNext, orders);
+            const input = inputs[current++];
+            if (faster) fastCnt.encount(), cb(input, fastCnt.decount, orders), doNext();
+            else cb(input, doNext, orders);
         }
     }
 
-    while (!nxt.done && !nxt.value.endsWith(".js")) nxt = iter.next();
     doNext();
 }
 
