@@ -37,3 +37,18 @@ test("parses generated _C style tables without appending an unmatched brace", ()
     const result = parsePureData("ignored();\nvar _C= [[\"page { color: red; }\"]];\nnext();");
     assert.deepEqual(JSON.parse(JSON.stringify(result)), [["page { color: red; }"]]);
 });
+
+test("parses common stylesheet tables referenced by spaced _C declarations", () => {
+    const result = parsePureData([
+        "var __COMMON_STYLESHEETS__ = __COMMON_STYLESHEETS__ || {};",
+        "__COMMON_STYLESHEETS__['./shared.wxss'] = [\"page { width: \",[0,12],\"; }\"];",
+        "var setCssToHead = function(file) {",
+        "var _C = __COMMON_STYLESHEETS__",
+        "return _C[file];",
+        "};"
+    ].join("\n"));
+
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), {
+        "./shared.wxss": ["page { width: ", [0, 12], "; }"]
+    });
+});

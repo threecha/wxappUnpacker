@@ -325,7 +325,6 @@ function doWxss(dir, cb, mainDir, nowDir) {
             // let wxAppCodeVarDeclareEnd = wxAppCodeVarDeclareIndex + wxAppCodeVarDeclare.length;
             // mainCode = mainCode.substr(0, wxAppCodeVarDeclareIndex) + mainCode.substr(wxAppCodeVarDeclareEnd);
 
-            code = code.slice(code.lastIndexOf('var setCssToHead = function(file, _xcInvalid'));
             pureData = parsePureData(code);
             //let mainCode=oriCode.slice(oriCode.indexOf("setCssToHead"),oriCode.lastIndexOf(";var __pageFrameEndTime__"));
             console.log("Guess wxss(first turn)...");
@@ -366,9 +365,21 @@ function doWxss(dir, cb, mainDir, nowDir) {
 }
 
 function parsePureData(source) {
-    const markerIndex = source.lastIndexOf("var _C=");
-    if (markerIndex === -1) throw new Error("Cannot find the generated _C style table.");
-    const declaration = source.slice(markerIndex).split(/\r?\n/, 1)[0];
+    const markers = [...source.matchAll(/var\s+_C\s*=/g)];
+    if (markers.length === 0) throw new Error("Cannot find the generated _C style table.");
+    const markerIndex = markers[markers.length - 1].index;
+    const declarationEnd = source.indexOf("\n", markerIndex);
+    const commonTableIndex = source.lastIndexOf("var __COMMON_STYLESHEETS__", markerIndex);
+    if (commonTableIndex !== -1) {
+        const setCssIndex = source.indexOf("var setCssToHead", commonTableIndex);
+        if (setCssIndex !== -1 && setCssIndex < markerIndex) {
+            const commonDeclaration = source.slice(commonTableIndex, setCssIndex);
+            return createVM({}).run(commonDeclaration + "\n__COMMON_STYLESHEETS__");
+        }
+    }
+    const evaluationStart = commonTableIndex === -1 ? markerIndex : commonTableIndex;
+    const evaluationEnd = declarationEnd === -1 ? source.length : declarationEnd;
+    const declaration = source.slice(evaluationStart, evaluationEnd);
     return createVM({}).run(declaration + "\n_C");
 }
 

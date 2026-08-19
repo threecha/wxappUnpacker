@@ -130,19 +130,26 @@ function genList(buf, infoListLength, dataLength) {
 
 function saveFile(dir, buf, list) {
     console.log("Saving files...");
-    const targets = new Set();
+    const targets = new Map();
     const validated = list.map(info => {
         const target = safeOutputPath(dir, info.name);
         assertNoSymlinkPath(path.resolve(dir), target);
         const targetKey = process.platform === "win32" || process.platform === "darwin"
             ? target.normalize("NFC").toLowerCase()
             : target;
-        if (targets.has(targetKey)) {
-            throw new WxapkgFormatError(`Archive contains a duplicate output path: ${JSON.stringify(info.name)}.`);
+        const previous = targets.get(targetKey);
+        if (previous) {
+            const previousData = buf.subarray(previous.off, previous.off + previous.size);
+            const currentData = buf.subarray(info.off, info.off + info.size);
+            if (previous.size !== info.size || !previousData.equals(currentData)) {
+                throw new WxapkgFormatError(`Archive contains a conflicting duplicate output path: ${JSON.stringify(info.name)}.`);
+            }
+            console.warn(`Skipping byte-identical duplicate output path: ${JSON.stringify(info.name)}.`);
+            return null;
         }
-        targets.add(targetKey);
+        targets.set(targetKey, info);
         return {info, target};
-    });
+    }).filter(Boolean);
     for (const {info, target} of validated) {
         wu.save(target, buf.subarray(info.off, info.off + info.size));
     }

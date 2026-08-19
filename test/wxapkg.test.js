@@ -65,6 +65,20 @@ test("detects duplicate output paths before writing", () => {
     assert.deepEqual(fs.readdirSync(root), []);
 });
 
+test("skips byte-identical duplicate output paths", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "wxapp-unpacker-identical-duplicate-"));
+    const packagePath = path.join(root, "duplicate.wxapkg");
+    fs.writeFileSync(packagePath, createWxapkg([
+        {name: "/same.txt", data: "same"},
+        {name: "same.txt", data: "same"}
+    ]));
+
+    const result = spawnSync(process.execPath, [entrypoint, "--output-only", packagePath], {encoding: "utf8"});
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stderr, /Skipping byte-identical duplicate output path/);
+    assert.equal(fs.readFileSync(path.join(outputDirectoryFor(packagePath), "same.txt"), "utf8"), "same");
+});
+
 test("refuses to write through an existing symbolic link", {skip: process.platform === "win32"}, () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "wxapp-unpacker-symlink-"));
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "wxapp-unpacker-outside-"));
